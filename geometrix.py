@@ -1,5 +1,5 @@
 from __future__ import division
-import os, re, sys, math, random
+import os, re, sys, math, random, copy
 import numpy as NP
 from glob import glob
 import cwgutils
@@ -104,8 +104,8 @@ def mergePDBS(elemKey, HOLDER):
 			rotCoOrd = NP.dot(R, tempMx)
 			HOLDER['modified'].append((elem[0], elem[1], elem[2], elem[3], float(rotCoOrd[0]), float(rotCoOrd[1]), float(rotCoOrd[2])))
 
-	for line in HOLDER['hybrid']:
-		print line
+	#for line in HOLDER['hybrid']:
+	#	print line
 
 
 	#Applying second degree rotational transformation
@@ -161,26 +161,27 @@ def mergePDBS(elemKey, HOLDER):
 
 	
 def normalizeCentroids(model):
-	AAModel = []
-	uID = list(set([v[3] for v in model]))
-	for uid in uID:
-		x = []
-		y = []
-		z = []
-		for line in model:
-			if uid == line[3]:
-				aaName = line[1]
-				x.append(line[4])
-				y.append(line[5])
-				z.append(line[6])
-		AAModel.append((aaName, uid, NP.mean(x), NP.mean(y), NP.mean(z)))
+    #print model
+    AAModel = []
+    uID = list(set([v[3] for v in model]))
+    for uid in uID:
+        x = []
+	y = []
+	z = []
+	for line in model:
+	    if uid == line[3]:
+		#print line
+		aaName = line[1]
+		x.append(line[4])
+		y.append(line[5])
+		z.append(line[6])
+	AAModel.append([aaName, uid, NP.mean(x), NP.mean(y), NP.mean(z)])
 
-	return AAModel
+    return AAModel
 	
 
 def extractSphere(model, aaid, radius):
 	SOI = []
-	
 	for line in model:
 		if str(line[1]) == aaid:
 			basisCoOrd = [line[2], line[3], line[4]]
@@ -189,7 +190,95 @@ def extractSphere(model, aaid, radius):
 		coOrd = [line[2], line[3], line[4]]
 		if math.sqrt((coOrd[0] - basisCoOrd[0])**2 + (coOrd[1] - basisCoOrd[1])**2 + (coOrd[2] - basisCoOrd[2])**2) < radius:
 			SOI.append(line)
-	return SOI 
+			
+	return SOI
+
+def influenceSurface(model, aaid, cutOff):
+	#'''Identifies a sphere of influence around the given amino-acid and calculates centroid based sphere co-ordinates'''
+	AAModel = normalizeCentroids(model)
+	#print AAModel
+	r = 50*cutOff
+	soi = extractSphere(AAModel, aaid, r)
+	return soi
+	
+def identifyCatalyticPockets(data):
+    '''This program identifies putative catalytic pockets from the 3D structure to calculate reactivity.'''
+    seq = [x[0] for x in data]
+    #Identifying dimensions
+    x_min = min([x[2] for x in data])
+    x_max = max([x[2] for x in data])
+    y_min = min([y[3] for y in data])
+    y_max = max([y[3] for y in data])
+    z_min = min([z[4] for z in data])
+    z_max = max([z[4] for z in data])      
+    p_center = [(x_min+x_max)/2, (y_min+y_max)/2, (z_min+z_max)/2]
+    udistx = (x_max - x_min)/4
+    udisty = (y_max - y_min)/4
+    udistz = (z_max - z_min)/4
+    
+    print udistx*4, udisty*4, udistz*4
+        
+    UNIT = {}
+        
+    #Identifying unit cells
+    for i in range(1,4):
+        for j in range(1,4):
+            for k in range(1,4):
+                xq = [(i-1)*udistx, i*udistx]
+                yq = [(j-1)*udisty, j*udisty]
+                zq = [(k-1)*udistz, k*udistz]
+                    
+                #Identifying all AAs lying in the box
+                AA_IN_BOX = []
+                for seq in data:
+                    if xq[0] <= seq[2] <= xq[1] and yq[0] <= seq[3] <= yq[1] and zq[0] <= seq[4] <= zq[1]:
+                        print "Identified", seq[0], "within unit", i, j ,k
+                        AA_IN_BOX.append([seq[0], seq[1]])
+                    
+                #Calculating mean-dist within unit:
+                d = 0.0
+                    
+                if len(AA_IN_BOX) < 2:
+                    UNIT[float(0)] = [xq, yq, zq]
+                else:
+                    for elem1 in AA_IN_BOX:
+                        for elem2 in AA_IN_BOX:
+                            d += eucDist(getCoOrdinates(data, elem1[1]), getCoOrdinates(data, elem2[1]))*(1/len(AA_IN_BOX))
+                    UNIT[d] = [xq, yq, zq]
+    
+    h = sorted(UNIT.keys(), reverse=True)
+    pockets = []
+    for i in h[:4]:
+        pockets.append(UNIT[h[i]])
+        
+    return pockets
+                    
+
+
+########################################################################
+###############Ancillary Mathematical/Geometric functions###############
+
+def eucDist(pA, pB):
+    if len(list(pA)) == 1 and len(list(pB)) == 1:
+        return abs(float(pB) - float(pA))
+
+    elif len(list(pA)) == 2 and len(list(pB)) == 2:
+        return math.sqrt((pB[0] - pA[0])**2 + (pB[1] - pA[1])**2)
+        
+    elif len(list(pA)) == 3 and len(list(pB)) == 3:
+        return math.sqrt((pB[0] - pA[0])**2 + (pB[1] - pA[1])**2 + (pB[2] - pA[2])**2)
+
+def getCoOrdinates(coOrdData, pos):
+    for element in coOrdData:
+        if element[1] == pos:
+            return (element[2], element[3], element[4])
+
+
+
+
+
+
+
 
 
 

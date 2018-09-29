@@ -1,0 +1,34 @@
+set view equal xyz
+set hidden3d front
+set parametric
+set urange [0:2*pi]          
+set vrange [-pi/2.0:pi/2.0]
+
+filename = 'data2.dat'
+
+# get number of data-lines in filename
+nlines   = system(sprintf('grep -v ^# %s | wc -l', filename))
+
+# this will save the plot commands
+commands = 'splot '
+do for [i=1:nlines] {
+   # get the i-th line
+   line = system( sprintf('grep -v ^# %s | awk "NR == %i {print; exit}" ', filename, i) )
+
+   # extract the data
+   x = word(line,3)
+   y = word(line,4)
+   z = word(line,5)
+   r = word(line,6)
+
+   # and save the instructions to plot the corresponding sphere 
+   commands = commands . sprintf('%s + %s*cos(v)*cos(u), %s + %s*cos(v)*sin(u), %s + %s*sin(v)  t "line %i"', x, r, y, r, z, r, i)
+
+   # if not EOF, add a comma to commands
+   if(i<nlines) { commands = commands . ',  ' }
+}
+
+# commands is a string. We can run it into the command line through macros
+print commands
+set macros
+@commands
