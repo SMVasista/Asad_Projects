@@ -8,6 +8,8 @@ import pdbutils as pdb
 import cwgutils
 
 cwl = os.getcwd()
+k_temp = 300
+pH = 6.5
 
 def initializeDataDump(name):
     #Initializing project simulation dump location
@@ -31,11 +33,9 @@ def minimizeEnergyStruc(projName, coOrdData):
     COORD_DATA_HOLDER.append(coOrdData)
     
     #Initializing optimization
-    t = 100
-    k_temp = 300
-    pH = 6.5
+    t = 25
     rTemp = (k_temp)/300
-    h = 0.05
+    h = 0.07
     k_stearic = 2
     k_elec = 2
     k_hydp = -2
@@ -71,7 +71,7 @@ def minimizeEnergyStruc(projName, coOrdData):
             sub_data = []
             alpha = 0.02
             while len(sub_data) < 3:
-                sub_data = gx.extractSphere(data, str(aa[1]), alpha*50)
+                sub_data = gx.extractSphere(data, aa[1], alpha*50)
                 alpha += 0.01
             
             #Iterating over region to optimize locations of each AA in region
@@ -160,37 +160,37 @@ def minimizeEnergyStruc(projName, coOrdData):
     
 #def tbdSimulation():
 
-def calculateEnergyFunc(pockets, COORD_DATA_HOLDER, EDF):
+def calculateEnergyFunc(pockets, COORD_DATA_HOLDER, EDF, outLoc):
     '''This program computes the time dependent energy functions of whole body (protein) and pockets'''
     
     dataC = copy.deepcopy(COORD_DATA_HOLDER)
     dataE = copy.deepcopy(EDF)
     
     #Calculating stability parameters
-    inst = dataC.keys()
-    seq = [x[0] for x in dataC[inst[0]]]
+    inst = len(dataC)
+    seq = [x[0] for x in dataC[0]]
     
     #1) Calculating RMS profile    
     RMSF = []
-    init = dataC[inst[0]]
+    init = dataC[0]
     
-    for i in inst:
+    for i in range(inst):
         rsq = 0
-        for j in seq:
-            rsq += ((dataC[i][j][2] - dataC[0][j][2])**2 + (dataC[i][j][3] - dataC[0][j][3])**2 + (dataC[i][j][4] - dataC[0][j][4])**2)*(1/len(inst))
+        for j in range(len(seq)):
+            rsq += ((dataC[i][j][2] - dataC[0][j][2])**2 + (dataC[i][j][3] - dataC[0][j][3])**2 + (dataC[i][j][4] - dataC[0][j][4])**2)*(1/len(dataC))
         RMSF.append(math.sqrt(rsq))
         
     #2) Calculating energy minimization profile
-    Emin = []
-    for i in inst:
+    Emin = [0]
+    for i in dataE.keys():
         etotal = 0
-        for j in seq:
-            etotal += dataE[i][j]['Total']*(1/len(inst))
+        for j in dataE[i].keys():
+            etotal += dataE[i][j]['Total']*(1/len(dataC))
         Emin.append(etotal)
         
     #3) Calculating Gyration profile
     rGyration = []
-    for i in inst:
+    for i in range(inst):
         x_min = min([x[2] for x in dataC[i]])
         x_max = max([x[2] for x in dataC[i]])
         y_min = min([y[3] for y in dataC[i]])
@@ -201,18 +201,18 @@ def calculateEnergyFunc(pockets, COORD_DATA_HOLDER, EDF):
         rGyration.append(p_center)
         
     #4) Calculating H-Bond formation profile
-    HBondCount = []
-    for i in inst:
+    HBondCount = [0]
+    for i in dataE:
         hbp = 0
-        for j in seq:
-            if abs(dataE[i][j]['Hbond']):
+        for j in dataE[i]:
+            if abs(dataE[i][j]['Hbond']) > 0:
                 hbp += 1
         HBondCount.append(hbp)
         
-    HBondStrength = []
-    for i in inst:
+    HBondStrength = [0]
+    for i in dataE:
         hbs = 0
-        for j in seq:            
+        for j in dataE[i]:            
             hbs += abs(dataE[i][j]['Hbond'])
         HBondStrength.append(hbs)
     
@@ -226,21 +226,21 @@ def calculateEnergyFunc(pockets, COORD_DATA_HOLDER, EDF):
         
         _seq = []
         alpha = 0.02
-        while len(sub_data) < 3:
+        while len(_seq) < 3:
             _seq = gx.extractSphereCentroid(dataC[-1], centroid, alpha*50)
             alpha += 0.01
             
         #Calculating volume encroachment
         PKTencr = {}
         udataC = dataC[-1]
-        udataE = dataE[-1]
+        udataE = dataE[sorted(dataE.keys())[len(dataE.keys())-1]]
         
         dvol = 0
         for aa in _seq:
-            aa_ = bp.map_aa_names(aa[0])
-            ld = gx.eucDist(centroid, gx.getCoOrdinates(udataC, aa[1])) - ((bp.VDW_wall[aa_])**0.33)*0.2388
+            aa_ = bp.map_aa_names(aa[0], '1')
+            ld = gx.eucDist(centroid, gx.getCoOrdinates(udataC, aa[1])) - ((bp.VDW_vol[aa_])**0.33)*0.2388
             sd = ld - gx.eucDist(centroid, [loc[0][0], loc[1][0], loc[2][0]])
-            dvol -= sd*0.5*bp.VDW_wall[aa_]
+            dvol -= sd*0.5*bp.VDW_vol[aa_]
         PKTencr[pkID] = apVol - dvol
         
         #Calculating Charge Density
@@ -248,7 +248,7 @@ def calculateEnergyFunc(pockets, COORD_DATA_HOLDER, EDF):
         
         chard = 0.0
         for aa in _seq:
-            aa_ = bp.map_aa_names(aa[0])
+            aa_ = bp.map_aa_names(aa[0], '1')
             chard += ((bp.Charge[aa_] + (bp.pKa[aa_] - pH))+0.001)* (1/gx.eucDist([aa[2], aa[3], aa[4]], centroid))**2 *(1/apVol)
         PKTchrd[pkID] = chard
         
@@ -257,8 +257,8 @@ def calculateEnergyFunc(pockets, COORD_DATA_HOLDER, EDF):
         
         hyphi = 0.0
         for aa in _seq:
-            aa_ = bp.map_aa_names(aa[0])
-            hyphi += ((bp.Hydrophobicity[aa_] - NP.mean(bp.Hydrophobicity.values()))*(bp.Hydrophobicity[_aa_] - NP.mean(bp.Hydrophobicity.values()))/NP.mean(bp.Hydrophobicity.values())**2)*(1/apVol)*(1/len(_seq))
+            aa_ = bp.map_aa_names(aa[0], '1')
+            hyphi += ((bp.Hydrophobicity[aa_] - NP.mean(bp.Hydrophobicity.values())))/NP.mean(bp.Hydrophobicity.values())*(1/apVol)*(1/len(_seq))
         PKThydp[pkID] = hyphi
         
         #Calculating arbitrary internal bonding energy
@@ -266,25 +266,28 @@ def calculateEnergyFunc(pockets, COORD_DATA_HOLDER, EDF):
         
         en = 0.0
         for aa in _seq:
-            en += udataE[aa[0]] * (1/gx.eucDist([aa[2], aa[3], aa[4]], centroid))**2 * (1/len(_seq)) * (1/apVol)
+            en += udataE[str(aa[0])+'_'+str(aa[1])]['Total'] * (1/gx.eucDist([aa[2], aa[3], aa[4]], centroid))**2 * (1/len(_seq)) * (1/apVol)
         PKTbeny[pkID] = en
         
         #Tabulating report
-        print "Finished calculating energy parameters, tabulating..."
         
-        with open(os.path.join(cwl, 'stability_parameters.csv'), 'a') as f:
-            f.write('Time RMS Energy_Minimization Gyration_r HBond_profile\n')
-            for n in range(len(RMSF)):
-                f.write(str(n)+' '+str(RMSF[n])+' '+str(Emin)+' '+str(rGyration)+' '+str(HBondStrength)+'\n')
-                
-        with open(os.path.join(cwl, 'catalytic_pocket_parameters.csv'), 'a') as f:
+        with open(os.path.join(outLoc, 'catalytic_pocket_parameters.csv'), 'a') as f:
             for ids in PKTencr.keys():
                 f.write(str(ids)+'\n')
-                f.write('Volume Encroachment '+str(PKTencr[ids])+'\n')
-                f.write('Charge Desity '+str(PKTchrd[ids])+'\n')
-                f.write('Pocket Hydrophobicity '+str(PKThydp[ids])+'\n')
-                f.write('Internal Energy '+str(PKTbeny[ids])+'\n')
+                f.write('Centroid Location:'+str(centroid)+'\n')
+                f.write('Volume Encroachment:'+str(PKTencr[ids])+'\n')
+                f.write('Charge Density:'+str(PKTchrd[ids])+'\n')
+                f.write('Pocket Hydrophobicity:'+str(PKThydp[ids])+'\n')
+                f.write('Internal Energy:'+str(PKTbeny[ids])+'\n')
                 f.write('\n')
+
+    print "Finished calculating energy parameters, tabulating..."
+
+    with open(os.path.join(outLoc, 'stability_parameters.csv'), 'a') as f:
+    
+        f.write('Time RMS Energy_Minimization HBond_Count HBond_profile\n')
+        for n in range(len(RMSF)):
+            f.write(str(n)+' '+str(RMSF[n])+' '+str(Emin[n])+' '+str(HBondCount[n])+' '+str(HBondStrength[n])+'\n')
     
     
     

@@ -1,0 +1,7 @@
+gene_name:KRAS
+pdbLoc:/home/user1/Desktop/MDS/samples
+mutation:C118H:GOF
+mutation:G12D:GOF
+mutation:G12V:GOF
+mutation:C118R:COF
+mutation:I55K:na

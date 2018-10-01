@@ -183,8 +183,19 @@ def normalizeCentroids(model):
 def extractSphere(model, aaid, radius):
 	SOI = []
 	for line in model:
-		if str(line[1]) == aaid:
-			basisCoOrd = [line[2], line[3], line[4]]
+	    if line[1] == aaid:
+	        basisCoOrd = [line[2], line[3], line[4]]
+	
+	for line in model:
+		coOrd = [line[2], line[3], line[4]]
+		if math.sqrt((coOrd[0] - basisCoOrd[0])**2 + (coOrd[1] - basisCoOrd[1])**2 + (coOrd[2] - basisCoOrd[2])**2) < radius:
+			SOI.append(line)
+			
+	return SOI
+	
+def extractSphereCentroid(model, centroid, radius):
+	SOI = []
+	basisCoOrd = centroid
 	
 	for line in model:
 		coOrd = [line[2], line[3], line[4]]
@@ -196,6 +207,7 @@ def extractSphere(model, aaid, radius):
 def influenceSurface(model, aaid, cutOff):
 	#'''Identifies a sphere of influence around the given amino-acid and calculates centroid based sphere co-ordinates'''
 	AAModel = normalizeCentroids(model)
+	print "~", AAModel
 	#print AAModel
 	r = 50*cutOff
 	soi = extractSphere(AAModel, aaid, r)
@@ -215,8 +227,6 @@ def identifyCatalyticPockets(data):
     udistx = (x_max - x_min)/4
     udisty = (y_max - y_min)/4
     udistz = (z_max - z_min)/4
-    
-    print udistx*4, udisty*4, udistz*4
         
     UNIT = {}
         
@@ -232,7 +242,6 @@ def identifyCatalyticPockets(data):
                 AA_IN_BOX = []
                 for seq in data:
                     if xq[0] <= seq[2] <= xq[1] and yq[0] <= seq[3] <= yq[1] and zq[0] <= seq[4] <= zq[1]:
-                        print "Identified", seq[0], "within unit", i, j ,k
                         AA_IN_BOX.append([seq[0], seq[1]])
                     
                 #Calculating mean-dist within unit:
@@ -249,7 +258,7 @@ def identifyCatalyticPockets(data):
     h = sorted(UNIT.keys(), reverse=True)
     pockets = []
     for i in h[:4]:
-        pockets.append(UNIT[h[i]])
+        pockets.append(UNIT[i])
         
     return pockets
                     
