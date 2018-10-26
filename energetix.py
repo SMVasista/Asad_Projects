@@ -33,7 +33,7 @@ def minimizeEnergyStruc(projName, coOrdData):
     COORD_DATA_HOLDER.append(coOrdData)
     
     #Initializing optimization
-    t = 25
+    t = 5
     rTemp = (k_temp)/300
     h = 0.07
     k_stearic = 2

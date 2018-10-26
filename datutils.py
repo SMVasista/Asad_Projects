@@ -1,6 +1,7 @@
 from __future__ import division
 import os, re, sys, math, random, copy, pickle
 from glob import glob
+import bioprop as bp
 import cwgutils
 
 cwl = os.getcwd()
@@ -73,9 +74,15 @@ def collateReports(mutData, DBLoc):
                 
 	return sample, trainSet, testSet
 
-def writeLFiles(sample, trainSet, testSet):
+def writeLFiles(sample, trainSet, testSet, NSFL):
     '''This program writes collected data into training file and test file for the ANN'''
-    with open(os.path.join(cwl, 'ann_input_train.csv'), 'a') as f:
+
+    try:
+    	NSFL_features = NSFL[NSFL.keys()[0]].keys()
+    except:
+        NSFL_features = []
+
+    with open(os.path.join(cwl, 'md_input_train.csv'), 'a') as f:
         f.write('Blk'+',')
         for entry in sorted(trainSet):
             f.write(str(entry)+',')
@@ -85,8 +92,16 @@ def writeLFiles(sample, trainSet, testSet):
             for entry in sorted(trainSet):
                 f.write(str(sample[entry][feature])+',')
             f.write('\n')
+        for feature in NSFL_features:
+            f.write(str(feature)+',')
+            for entry in sorted(trainSet):
+                try:
+                    f.write(str(NSFL[entry][feature])+',')
+                except:
+                    f.write('0,')
+            f.write('\n')
 
-    with open(os.path.join(cwl, 'ann_input_test.csv'), 'a') as f:
+    with open(os.path.join(cwl, 'md_input_test.csv'), 'a') as f:
         f.write('Blk'+',')
         for entry in sorted(testSet):
             f.write(str(entry)+',')
@@ -96,8 +111,96 @@ def writeLFiles(sample, trainSet, testSet):
                 f.write(str(feature)+',')
                 for entry in sorted(testSet):
                     f.write(str(sample[entry][feature])+',')
-                f.write('\n')  
-                
+                f.write('\n')
+        for feature in NSFL_features:
+            if feature != 'outcome':
+                f.write(str(feature)+',')
+                for entry in sorted(testSet):
+                    try:
+                        f.write(str(NSFL[entry][feature])+',')
+                    except:
+                        f.write('0,')
+            f.write('\n')
+
+def parseMutation(mutaString):
+    #try:
+    if True:
+        a = list(mutaString)
+        start = a.pop(0)
+        end = a.pop(-1)
+        num = int(''.join(a))
+        return (start, num, end)
+    #except:
+    #    raise IOError
+    #    return None
+
+def parseAllCombinations(pos, projName, mutList, inputfile):
+
+
+    #Reading mutation-signature outcomes
+    data = cwgutils.readLines(inputfile)
+
+    outcome = {}
+    for mt in mutList:
+        name = str(mt[0])+str(mt[1])+str(mt[2])
+        for line in data:
+            if name in line:
+            	    if line.split(':')[2] == 'GOF' or line.split(':')[2] == 'SOF':
+                	outcome[projName+'_'+str(name)] = 1.0
+            	    elif line.split(':')[2] == 'LOF':
+                        outcome[projName+'_'+str(name)] = -1.0
+            	    elif line.split(':')[2] == 'COF':
+                        outcome[projName+'_'+str(name)] = 0.000001
+                    else:
+                        outcome[projName+'_'+str(name)] = 0
+
+    print outcome
+
+    #Collating features
+    NSFL = {}
+    comb = []
+    Loc = []
+    for sub1 in bp.Flexibility.keys():
+        for sub2 in bp.Flexibility.keys():
+            comb.append(str(sub1)+'_'+str(sub2))
+
+    for i in range(max(pos)):
+        Loc.append(str(i))
+	
+    for pMut in mutList:
+        name = projName+'_'+str(pMut[0])+str(pMut[1])+str(pMut[2])
+        NSFL[name] = {}
+        for loc in Loc:
+            if str(pMut[1]) == loc:
+                reg = []
+                jx = Loc.index(loc)
+                if int(loc) > 2:     
+                    reg = Loc[jx-2:jx+3]
+                else:
+                    reg = Loc[jx]
+
+                for i, iPos in enumerate(reg):
+                    NSFL[name][iPos] = math.tanh(1/((i+1) - 3.00001)**4)
+
+            else:
+                if loc not in NSFL[name]:
+                    NSFL[name][loc] = 0
+
+        for sub in comb:
+            if str(pMut[0])+'_'+str(pMut[2]) == sub:
+                if sub not in NSFL[name]:
+                    NSFL[name][sub] = outcome[name]*1
+                else:
+                    NSFL[name][sub] += outcome[name]*1
+            else:
+                NSFL[name][sub] = 0
+
+    return NSFL
+
+
+
+
+
                    
     
         

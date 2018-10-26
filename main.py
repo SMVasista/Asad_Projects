@@ -10,6 +10,8 @@ import geometrix as gx
 import energetix as ex
 import xyzviz as viz
 
+sys.path.append('/APF/data_collation/iCOG/binaries/mds/dependencies')
+
 cwl = os.getcwd()
 
 def parseInput(fileLoc):
@@ -27,19 +29,9 @@ def parseInput(fileLoc):
             elif 'pdbLoc' in line or 'PDBloc' in line:
                 pdbLoc = str(line.split(':')[1])
             elif 'mutation' in line:
-                mutations.append(parseMutation(line.split(':')[1]))
+                mutations.append(dutils.parseMutation(line.split(':')[1]))
     return projName, pdbLoc, mutations
 
-def parseMutation(mutaString):
-    try:
-        a = list(mutaString)
-        start = a.pop(0)
-        end = a.pop(-1)
-        num = int(''.join(a))
-        return (start, num, end)
-    except:
-        raise IOError
-        return None
         
 #def queryMutation(gene, mutation):
     #TODO
@@ -51,84 +43,87 @@ def generateProteinSequence(coOrdData, mutList):
         start = bp.map_aa_names(sig[0], '3')
         end = bp.map_aa_names(sig[2], '3')
         for line in tdata:
-            print line, start, end, sig[1]
             if line[1] == sig[1] and line[0] == start:
-                print "Applying mutation:", sig, "on protein"
+                print ("Applying mutation:", sig, "on protein")
                 line[0] = end
         M_SEQUENCES[sig] = tdata
     return M_SEQUENCES
 
 if __name__=="__main__":
-	
-	script, inputfile = sys.argv
-	
-	projName, pdbLoc, mutList = parseInput(inputfile)
-	
-	H = pdb.readPDB(pdbLoc)
-	uModel = pdb.stringPDB(H)
-	aaCordData = gx.influenceSurface(uModel, uModel[0][3], cutOff=10)
-	
-	DBLoc = []
-	
-	DBLoc.append(str(os.path.join(cwl, projName)))
-	
-	##################################################
-	#Applying Energy Minimization
-	if os.path.exists(os.path.join(cwl, projName)) != True:
-	    os.makedirs(os.path.join(cwl, projName))
-	if os.path.exists(os.path.join(cwl, projName, 'traj')) != True:
-	    os.makedirs(os.path.join(cwl, projName, 'traj'))
-	
-	C, E = ex.minimizeEnergyStruc(projName, aaCordData)
-	
-	with open(os.path.join(cwl, projName, 'sout.p'), 'w') as f:
-	    pickle.dump(C,f)
-	with open(os.path.join(cwl, projName, 'eout.p'), 'w') as f:
-	    pickle.dump(E,f)
-	
-	pockets = gx.identifyCatalyticPockets(C[-1])
-	#The pockets identified here are putative.
-	
-	ex.calculateEnergyFunc(pockets, C, E, os.path.join(cwl, projName))
-	
-	d, l = viz.extractSimulData(os.path.join(cwl, projName, 'sout.p'))
-	viz.writeTrajectory(d, l, os.path.join(cwl, projName, 'traj'))
     
-	##################################################
-	#Applying mutation 
-	#mutList = queryMutation(mutation)
-	seq = generateProteinSequence(aaCordData, mutList)
+    script, inputfile = sys.argv
     
-	##################################################
-	#Applying Energy Minimization (on mutations)
-	for mut in mutList:
-	    nName = str(projName)+'_'+str(mut[0])+str(mut[1])+str(mut[2])
-	    DBLoc.append(str(os.path.join(cwl, nName)))
-	    
-	    if os.path.exists(os.path.join(cwl, nName)) != True:
-	        os.makedirs(os.path.join(cwl, nName))
-	    if os.path.exists(os.path.join(cwl, nName, 'traj')) != True:
-	        os.makedirs(os.path.join(cwl, nName, 'traj'))
-		
-		C, E = ex.minimizeEnergyStruc(nName, seq[mut])
-		
-	    with open(os.path.join(cwl, nName, 'sout.p'), 'w') as f:
-                pickle.dump(C,f)
-	    with open(os.path.join(cwl, nName, 'eout.p'), 'w') as f:
-                pickle.dump(E,f)
-		
-            ex.calculateEnergyFunc(pockets, C, E, os.path.join(cwl, nName))
+    projName, pdbLoc, mutList = parseInput(inputfile)
+    
+    H = pdb.readPDB(pdbLoc)
+    uModel = pdb.stringPDB(H)
+    aaCordData = gx.influenceSurface(uModel, uModel[0][3], cutOff=10)
+    
+    DBLoc = []
+    
+    DBLoc.append(str(os.path.join(cwl, projName)))
+
+    ##################################################
+    #Rote-Learning from positional and substitution information
+    NSFL = dutils.parseAllCombinations([2000], projName, mutList, inputfile)
+    
+    ##################################################
+    #Applying Energy Minimization
+    if os.path.exists(os.path.join(cwl, projName)) != True:
+        os.makedirs(os.path.join(cwl, projName))
+    if os.path.exists(os.path.join(cwl, projName, 'traj')) != True:
+        os.makedirs(os.path.join(cwl, projName, 'traj'))
+    
+    C, E = ex.minimizeEnergyStruc(projName, aaCordData)
+    
+    with open(os.path.join(cwl, projName, 'sout.p'), 'w') as f:
+        pickle.dump(C,f)
+    with open(os.path.join(cwl, projName, 'eout.p'), 'w') as f:
+        pickle.dump(E,f)
+    
+    pockets = gx.identifyCatalyticPockets(C[-1])
+    #The pockets identified here are putative.
+    
+    ex.calculateEnergyFunc(pockets, C, E, os.path.join(cwl, projName))
+    
+    d, l = viz.extractSimulData(os.path.join(cwl, projName, 'sout.p'))
+    viz.writeTrajectory(d, l, os.path.join(cwl, projName, 'traj'))
+    
+    ##################################################
+    #Applying mutation 
+    #mutList = queryMutation(mutation)
+    seq = generateProteinSequence(aaCordData, mutList)
+    
+    ##################################################
+    #Applying Energy Minimization (on mutations)
+    for mut in mutList:
+        nName = str(projName)+'_'+str(mut[0])+str(mut[1])+str(mut[2])
+        DBLoc.append(str(os.path.join(cwl, nName)))
         
-            d, l = viz.extractSimulData(os.path.join(cwl, nName, 'sout.p'))
-            viz.writeTrajectory(d, l, os.path.join(cwl, nName, 'traj'))
+        if os.path.exists(os.path.join(cwl, nName)) != True:
+            os.makedirs(os.path.join(cwl, nName))
+        if os.path.exists(os.path.join(cwl, nName, 'traj')) != True:
+            os.makedirs(os.path.join(cwl, nName, 'traj'))
+        
+        C, E = ex.minimizeEnergyStruc(nName, seq[mut])
+        
+        with open(os.path.join(cwl, nName, 'sout.p'), 'w') as f:
+                pickle.dump(C,f)
+        with open(os.path.join(cwl, nName, 'eout.p'), 'w') as f:
+                pickle.dump(E,f)
+        
+        ex.calculateEnergyFunc(pockets, C, E, os.path.join(cwl, nName))
+        
+        d, l = viz.extractSimulData(os.path.join(cwl, nName, 'sout.p'))
+        viz.writeTrajectory(d, l, os.path.join(cwl, nName, 'traj'))
             
-	with open(os.path.join(cwl, 'dbloc'), 'w') as f:
-		pickle.dump(DBLoc, f)
+    with open(os.path.join(cwl, 'dbloc'), 'w') as f:
+        pickle.dump(DBLoc, f)
     
-	##################################################
-	#Collating data
-	sample, train, test = dutils.collateReports(inputfile, DBLoc)
-	dutils.writeLFiles(sample, train, test)
+    ##################################################
+    #Collating data
+    sample, train, test = dutils.collateReports(inputfile, DBLoc)
+    dutils.writeLFiles(sample, train, test, NSFL)
 
 
 
